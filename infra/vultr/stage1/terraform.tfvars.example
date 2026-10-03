@@ -1,0 +1,11 @@
+# cp terraform.tfvars.example terraform.tfvars   (terraform.tfvars is gitignored)
+
+ssh_public_key = "ssh-ed25519 AAAA... you@laptop"   # cat ~/.ssh/id_ed25519.pub
+admin_cidrs    = ["203.0.113.7/32"]                  # your public IP: curl -4 ifconfig.me  (then append /32)
+k8s_version    = "v1.xx.x+1"                         # scripts/vultr-lookups.sh versions
+
+# Optional overrides (defaults shown):
+# registry_name = "rowdyhacks"   # must be globally unique; if taken, pick another
+# region        = "ewr"
+# node_count    = 2
+# os_name       = "Debian 12 x64 (bookworm)"

@@ -1,0 +1,51 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - jq
+  - openssl
+  - docker.io
+  - postgresql
+  - python3-venv
+  - python3-pip
+write_files:
+  - path: /usr/local/sbin/idp-bootstrap.sh
+    permissions: "0750"
+    content: |
+      #!/bin/bash
+      # First-boot setup for the control-plane VM. Safe to re-run.
+      set -euo pipefail
+
+      install -d -m 755 /etc/idp
+
+      # Service user: owns /opt/idp-control-plane, may talk to Docker for builds.
+      id idp >/dev/null 2>&1 || useradd --system --create-home --home-dir /opt/idp-control-plane --shell /bin/bash idp
+      usermod -aG docker idp
+
+      # Local PostgreSQL (listens on localhost only by Debian default).
+      systemctl enable --now postgresql
+      if [ ! -f /etc/idp/database.env ]; then
+        PW=$(openssl rand -hex 24)
+        runuser -u postgres -- psql -v ON_ERROR_STOP=1 <<SQL
+      CREATE ROLE idp LOGIN PASSWORD '$PW';
+      CREATE DATABASE idp OWNER idp;
+      SQL
+        umask 027
+        echo "DATABASE_URL=postgresql://idp:$PW@127.0.0.1:5432/idp" > /etc/idp/database.env
+        chown root:idp /etc/idp/database.env
+        chmod 640 /etc/idp/database.env
+      fi
+
+      # Some images ship ufw enabled; the Vultr firewall group is the real gate.
+      if command -v ufw >/dev/null 2>&1; then
+        ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8000/tcp
+      fi
+
+      systemctl enable --now docker
+      touch /etc/idp/cloud-init-done
+runcmd:
+  - [ bash, /usr/local/sbin/idp-bootstrap.sh ]

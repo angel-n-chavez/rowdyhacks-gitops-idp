@@ -1,0 +1,35 @@
+# --- Terraform / OpenTofu: state contains the kubeconfig and registry creds ---
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfvars
+*.tfvars.json
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored; commit it.
+
+# --- secrets / credentials / kubeconfigs: this repo is PUBLIC ---
+.env
+.env.*
+!.env.example
+*.secrets
+*.pem
+*.key
+kubeconfig
+kubeconfig*
+*.kubeconfig
+.kube/
+
+# --- Python / local working dirs ---
+__pycache__/
+*.pyc
+.venv/
+venv/
+work/
+.idp-work/
