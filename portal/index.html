@@ -3,11 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f7f5">
-  <title>Launchpad | Developer Portal</title>
+  <meta name="theme-color" content="#ac1703">
+  <title>Developer Portal · The Getaway</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:ital,opsz,wght@0,9..40,400..700;1,9..40,400..700&family=Manuale:ital,wght@0,400..800;1,400..800&family=Oswald:wght@400;500;600;700&family=Shadows+Into+Light&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="mock-service.js" defer></script>
   <script src="app.js" defer></script>
@@ -15,33 +15,43 @@
 <body>
   <div class="shell">
     <aside class="sidebar" aria-label="Main navigation">
-      <a class="brand" href="#apps" data-nav="apps" aria-label="Launchpad home">
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
-        <span>launchpad<span class="brand-period">.</span></span>
+      <a class="brand" href="#apps" data-nav="apps" aria-label="RowdyHacks XII Developer Portal home">
+        <span class="brand-mark" aria-hidden="true">
+          <img src="assets/rh-logo.svg" alt="" class="brand-logo-img">
+        </span>
+        <span class="brand-text">
+          <span class="brand-title">GETAWAY<span class="brand-period">DEVPORTAL</span></span>
+          <small class="brand-sub">THE GETAWAY · IDP</small>
+        </span>
       </a>
 
       <div class="workspace-switcher">
-        <span class="workspace-avatar">R</span>
-        <span class="workspace-copy"><strong>RowdyHacks</strong><small>Engineering</small></span>
+        <span class="workspace-avatar">IDP</span>
+        <span class="workspace-copy"><strong>Mission Control</strong><small>Squad 12 · Heist Operations</small></span>
         <span class="switch-chevron" aria-hidden="true">⌄</span>
       </div>
 
-      <p class="nav-label">WORKSPACE</p>
+      <p class="nav-label">THE OPERATIONS FLOOR</p>
       <nav class="primary-nav">
         <a href="#apps" data-nav="apps" class="nav-link is-active"><span class="nav-icon grid-icon" aria-hidden="true"></span>Applications</a>
         <a href="#deploy" data-nav="deploy" class="nav-link"><span class="nav-icon plus-icon" aria-hidden="true"></span>Deploy application</a>
       </nav>
 
       <div class="sidebar-bottom">
-        <div class="environment"><span class="environment-dot"></span><span><strong>Development</strong><small>All systems operational</small></span></div>
-        <div class="profile"><span class="profile-avatar">JD</span><span><strong>Jordan Davis</strong><small>Developer</small></span><span class="profile-menu" aria-hidden="true">···</span></div>
+        <div class="environment"><span class="environment-dot"></span><span><strong>Secure channel</strong><small>All systems operational</small></span></div>
+        <div class="profile"><span class="profile-avatar">JD</span><span><strong>Jordan Davis</strong><small>Lead Operative</small></span><span class="profile-menu" aria-hidden="true">···</span></div>
       </div>
     </aside>
 
     <div class="main-column">
       <header class="topbar">
-        <div class="breadcrumbs"><span>Workspace</span><span class="crumb-divider">/</span><strong id="breadcrumb-current">Applications</strong></div>
-        <div class="topbar-right"><span class="help-link">Need a hand?</span><button class="help-button" type="button" aria-label="Help">?</button></div>
+        <div class="breadcrumbs"><span>The Getaway DevPortal</span><span class="crumb-divider">/</span><span>Workspace</span><span class="crumb-divider">/</span><strong id="breadcrumb-current">Applications</strong></div>
+        <div class="topbar-right">
+          <span class="confidential-tag" aria-hidden="true">CONFIDENTIAL</span>
+          <span class="secure-channel"><i></i> SECURE CHANNEL</span>
+          <span class="help-link">Need a hand?</span>
+          <button class="help-button" type="button" aria-label="Help">?</button>
+        </div>
       </header>
       <main id="app" tabindex="-1" aria-live="polite">
         <section class="loading-view"><span class="loading-spinner" aria-hidden="true"></span><p>Loading your workspace</p></section>
@@ -50,8 +60,8 @@
   </div>
 
   <dialog class="logs-dialog" id="logs-dialog" aria-labelledby="logs-title">
-    <div class="dialog-heading"><div><p class="eyebrow">APPLICATION OUTPUT</p><h2 id="logs-title">Recent logs</h2></div><button class="icon-button" type="button" data-action="close-dialog" aria-label="Close logs">×</button></div>
-    <div class="log-toolbar"><span id="logs-app-name">Application</span><span class="live-indicator"><i></i>Mock output</span></div>
+    <div class="dialog-heading"><div><p class="eyebrow">APPLICATION OUTPUT · TERMINAL</p><h2 id="logs-title">Recent logs</h2></div><button class="icon-button" type="button" data-action="close-dialog" aria-label="Close logs">×</button></div>
+    <div class="log-toolbar"><span id="logs-app-name">Application</span><span class="live-indicator"><i></i>Live stream</span></div>
     <pre class="log-output" id="log-output"></pre>
   </dialog>
 </body>
