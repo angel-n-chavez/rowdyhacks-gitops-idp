@@ -1,25 +1,25 @@
 # RowdyHacks GitOps Internal Developer Platform
 
 A hackathon-scale Internal Developer Platform (IDP) prototype. Developers
-choose a public GitHub repository and one of two Golden Paths—Static Website or
-FastAPI Web Service—through a portal. The intended platform flow packages the
-application, records Kubernetes desired state in Git, and uses Flux to deploy
-it.
+submit a public GitHub repository and choose one of two Golden Paths—Static
+Website or FastAPI Web Service—through a portal.
 
-> **Current status:** The portal and Phase 1 control-plane API are available for
-> local development. The deployment pipeline is not implemented yet, so
-> deployments submitted to the real API currently end in
-> `PIPELINE_NOT_IMPLEMENTED`. The portal's mock mode can be used to explore
-> the demo UI and simulated deployment lifecycle.
+> **Current status:** The portal and Phase 3 control plane are available for
+> local development. The control plane clones and validates submitted
+> repositories, but manifest generation, image builds, and deployment are not
+> implemented yet. Valid repositories therefore end in
+> `PIPELINE_NOT_IMPLEMENTED`; invalid repositories report validation errors.
+> Use the portal's mock mode to explore a simulated successful deployment
+> lifecycle.
 
 ## Repository layout
 
 | Path | Purpose |
 |---|---|
 | [`portal/`](portal/) | Static developer portal; mock mode and optional control-plane API mode |
-| [`idp-control-plane/`](idp-control-plane/) | FastAPI API, in-memory application store, and deployment pipeline scaffold |
-| [`idp-gitops-manifests/`](idp-gitops-manifests/) | Flux GitOps state, Golden Path bases, and smoke-test example |
-| [`infra/`](infra/) | Terraform and scripts for the initial Vultr infrastructure stage |
+| [`idp-control-plane/`](idp-control-plane/) | FastAPI API, PostgreSQL-backed application store, Git clone and Golden Path validation |
+| [`idp-gitops-manifests/`](idp-gitops-manifests/) | Flux bootstrap and Traefik infrastructure manifests for local K3s |
+| [`infra/`](infra/) | Terraform and scripts for the initial Vultr control-plane infrastructure stage |
 | [`ARCHITECTURE-SCHEMA.md`](ARCHITECTURE-SCHEMA.md) | Platform requirements, API contract, and architecture details |
 
 ## Run the portal locally
@@ -41,20 +41,23 @@ In a separate terminal, from the repository root:
 
 ```bash
 cd idp-control-plane
+docker compose up -d db
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements-dev.txt
-if [ ! -f .env ]; then cp .env.example .env; fi
+test -f .env || cp .env.example .env
 ```
 
-Edit `.env` if needed, then start the API:
+The example `.env` configures local PostgreSQL and a sample platform domain.
+Adjust `PLATFORM_DOMAIN` for your environment if needed. Start the API:
 
 ```bash
 uvicorn app.main:create_app --factory --port 8000 --workers 1
 ```
 
-The API reads `PLATFORM_DOMAIN` from `.env`. One worker is required because the
-application store and job queue are in process memory. Useful endpoints:
+The API reads `DATABASE_URL` and `PLATFORM_DOMAIN` from `.env`. One worker is
+required because the job queue is in process memory. Applications and
+deployments are persisted in PostgreSQL. Useful endpoints:
 
 - Health check: <http://localhost:8000/health>
 - Interactive API docs: <http://localhost:8000/docs>
@@ -76,25 +79,36 @@ http://localhost:5173/?api=http%3A%2F%2Flocalhost%3A8001
 ```
 
 The local API allows browser access from `http://localhost:5173` and
-`http://127.0.0.1:5173`. Deploying through the API currently records and
-validates the request, then reports `PIPELINE_NOT_IMPLEMENTED`; it does not
-build or deploy an application yet.
+`http://127.0.0.1:5173`. For a real API deployment test, use a public GitHub
+repository that meets the selected Golden Path requirements in the
+[control-plane README](idp-control-plane/README.md). The API clones the default
+branch and validates its contents; it does not execute repository code.
+Successful validation currently ends with `PIPELINE_NOT_IMPLEMENTED`, because
+manifest generation, building, and deployment are future phases.
 
 ## Run tests
 
-After installing the control-plane development requirements:
+With the local PostgreSQL service running and development requirements
+installed:
 
 ```bash
 cd idp-control-plane
 pytest
 ```
 
+By default, tests run against local Git fixture repositories and do not need
+GitHub access. They use a separate `idp_test` database, created automatically;
+the test database name must end in `_test`. To additionally test cloning public
+repositories from GitHub, run `pytest -m network`.
+
 ## Infrastructure and deployment
 
-The manifests and infrastructure directories are for platform setup and are
-not needed to run the local portal or API. See
-[`idp-gitops-manifests/README.md`](idp-gitops-manifests/README.md) for the
-GitOps layout and
-[`idp-control-plane/README.md`](idp-control-plane/README.md) for API details.
-Review [`ARCHITECTURE-SCHEMA.md`](ARCHITECTURE-SCHEMA.md) before working on the
-deployment pipeline or cluster integration.
+The manifests and infrastructure directories are not needed to run the local
+portal or API. The GitOps repo currently includes local K3s Flux bootstrap and
+Traefik infrastructure configuration; application overlays are not yet
+generated by the control plane. See
+[`idp-gitops-manifests/README.md`](idp-gitops-manifests/README.md) for its
+current setup notes and
+[`idp-control-plane/README.md`](idp-control-plane/README.md) for API and
+validation details. Review [`ARCHITECTURE-SCHEMA.md`](ARCHITECTURE-SCHEMA.md)
+before implementing manifest generation, image builds, or cluster deployment.
