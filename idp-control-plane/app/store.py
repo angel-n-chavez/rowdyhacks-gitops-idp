@@ -171,6 +171,11 @@ class Store:
             row = s.scalar(select(ApplicationRow).where(ApplicationRow.name == name))
             return _app_record(row) if row else None
 
+    def get_application_by_id(self, app_id: uuid.UUID) -> ApplicationRecord | None:
+        with self._sessions() as s:
+            row = s.get(ApplicationRow, app_id)
+            return _app_record(row) if row else None
+
     def list_applications(self) -> list[ApplicationRecord]:
         with self._sessions() as s:
             rows = s.scalars(

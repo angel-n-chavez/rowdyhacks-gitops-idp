@@ -61,6 +61,20 @@ class ErrorCode(StrEnum):
     PIPELINE_NOT_IMPLEMENTED = "PIPELINE_NOT_IMPLEMENTED"  # Phase 1 scaffold; removed in Phase 3/4
 
 
+class PipelineError(Exception):
+    """A deployment failed for a reason the developer should be told about.
+
+    `message` is stored on the deployment and shown in the portal, so it must
+    be human-readable and must never contain credentials, absolute server
+    paths, or raw subprocess output (spec section 36).
+    """
+
+    def __init__(self, code: ErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+        self.message = message
+
+
 # --------------------------------------------------------------------------
 # State machine (spec section 13)
 # --------------------------------------------------------------------------

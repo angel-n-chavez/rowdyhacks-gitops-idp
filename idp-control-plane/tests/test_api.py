@@ -60,12 +60,16 @@ def test_second_deployment_waits_in_pending_behind_the_first(settings, gated):
         wait_for(lambda: c.get("/apps/second-app").json()["status"] == "failed")
 
 
-def test_scaffold_pipeline_fails_loudly_not_silently(settings):
+def test_scaffold_pipeline_fails_loudly_not_silently(settings, remotes):
+    # A repository that PASSES validation still ends FAILED until Phases 4-5
+    # implement build/deploy, so the scaffold can't be mistaken for a real deploy.
+    sha = remotes.create("example", "portfolio", {"index.html": "<h1>hi</h1>"})
     with make_client(settings) as c:           # real run_deployment
         c.post("/deploy", json=STATIC)
         wait_for(lambda: c.get("/apps/portfolio").json()["status"] == "failed")
         latest = c.get("/apps/portfolio").json()["latest_deployment"]
         assert latest["error_code"] == "PIPELINE_NOT_IMPLEMENTED"
+        assert latest["source_revision"] == sha
         assert latest["completed_at"] is not None
 
 

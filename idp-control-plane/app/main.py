@@ -15,6 +15,7 @@ import logging
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -77,10 +78,11 @@ def _summary(a: ApplicationRecord) -> dict:
 def create_app(
     settings: Settings | None = None,
     store: Store | None = None,
-    pipeline: Pipeline = run_deployment,
+    pipeline: Pipeline | None = None,
 ) -> FastAPI:
     """`store` and `pipeline` are injectable so tests can control timing."""
     settings = settings or get_settings()
+    pipeline = pipeline or partial(run_deployment, settings=settings)
     owns_store = store is None
     if store is None:
         store = Store(make_engine(settings.database_url.get_secret_value()))

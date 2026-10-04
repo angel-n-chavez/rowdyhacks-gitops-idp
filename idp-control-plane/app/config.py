@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # tree and one Docker daemon.
     job_workers: int = Field(default=1, ge=1, le=8)
 
+    # Cloning developer repositories (clone.py). Limits protect the VM's time
+    # and disk from a hostile or accidental giant repository.
+    git_binary: str = "git"
+    clone_timeout_seconds: int = Field(default=60, ge=5, le=600)
+    clone_max_mib: int = Field(default=100, ge=1, le=2048)
+
     @field_validator("database_url", mode="before")
     @classmethod
     def _postgres_only(cls, v):
