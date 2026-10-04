@@ -29,6 +29,7 @@ class JobRunner:
         if exc is not None:
             logger.error("background job crashed", exc_info=exc)
 
-    def shutdown(self) -> None:
+    def shutdown(self, wait: bool = False) -> None:
         # Drop queued jobs; a job already running finishes on its own thread.
-        self._pool.shutdown(wait=False, cancel_futures=True)
+        # `wait=True` additionally blocks until that running job is done.
+        self._pool.shutdown(wait=wait, cancel_futures=True)
