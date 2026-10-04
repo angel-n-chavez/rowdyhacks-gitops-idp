@@ -6,13 +6,16 @@ Run with the app factory (nothing is created at import time):
 
 --workers 1 matters: the store and job queue live inside this one process.
 
-Phase 1 endpoints: /health, POST /deploy, GET /apps, GET /apps/{app_name}.
+Needs a reachable PostgreSQL (DATABASE_URL). Tables are created at startup.
+
+Endpoints so far: /health, POST /deploy, GET /apps, GET /apps/{app_name}.
 Logs and DELETE arrive in Phase 6, auth and CORS in Phase 7.
 """
 import logging
 import uuid
 from collections.abc import Callable
 from contextlib import asynccontextmanager
+from functools import partial
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
@@ -20,6 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from .config import Settings, get_settings
+from .db import make_engine
 from .jobs import JobRunner
 from .models import (
     AppDetail,
@@ -75,17 +79,28 @@ def _summary(a: ApplicationRecord) -> dict:
 def create_app(
     settings: Settings | None = None,
     store: Store | None = None,
-    pipeline: Pipeline = run_deployment,
+    pipeline: Pipeline | None = None,
 ) -> FastAPI:
     """`store` and `pipeline` are injectable so tests can control timing."""
     settings = settings or get_settings()
-    store = store or Store()
+    pipeline = pipeline or partial(run_deployment, settings=settings)
+    owns_store = store is None
+    if store is None:
+        store = Store(make_engine(settings.database_url.get_secret_value()))
     runner = JobRunner(workers=settings.job_workers)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
+        # Fail fast: if PostgreSQL is unreachable the app refuses to start
+        # (and systemd shows why) instead of limping along returning 500s.
+        store.create_schema()
+        orphaned = store.fail_orphaned()
+        if orphaned:
+            logger.warning("marked %d in-progress deployment(s) failed after restart", orphaned)
         yield
         runner.shutdown()
+        if owns_store:
+            store.dispose()
 
     app = FastAPI(title="RowdyHacks IDP control plane", lifespan=lifespan)
     app.add_middleware(
@@ -97,6 +112,7 @@ def create_app(
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
+    app.state.runner = runner  # exposed so tests can wait for in-flight jobs
 
     @app.exception_handler(ApiError)
     async def _api_error(_: Request, exc: ApiError) -> JSONResponse:

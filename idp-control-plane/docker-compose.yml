@@ -1,0 +1,23 @@
+# Local PostgreSQL for development and tests:   docker compose up -d db
+# Dev-only credentials, bound to localhost only. Never reuse them anywhere real.
+services:
+  db:
+    image: postgres:16
+    container_name: idp-postgres
+    environment:
+      POSTGRES_USER: idp
+      POSTGRES_PASSWORD: idp
+      POSTGRES_DB: idp
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - idp-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idp -d idp"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+volumes:
+  idp-pgdata:
