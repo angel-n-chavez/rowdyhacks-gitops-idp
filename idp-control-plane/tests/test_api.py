@@ -12,6 +12,26 @@ def test_health_is_minimal(settings):
         assert c.get("/health").json() == {"status": "ok"}
 
 
+def test_local_portal_origins_can_call_the_api(settings):
+    with make_client(settings) as c:
+        response = c.get("/apps", headers={"Origin": "http://localhost:5173"})
+        assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+        preflight = c.options(
+            "/deploy",
+            headers={
+                "Origin": "http://127.0.0.1:5173",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+        assert preflight.status_code == 200
+        assert preflight.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+        rejected = c.get("/apps", headers={"Origin": "http://example.com"})
+        assert "access-control-allow-origin" not in rejected.headers
+
+
 def test_deploy_returns_202_without_waiting_for_the_pipeline(settings, gated):
     with make_client(settings, gated) as c:
         r = c.post("/deploy", json=GOOD)  # pipeline is parked; this must still return

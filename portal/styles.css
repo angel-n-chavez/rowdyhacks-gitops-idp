@@ -985,7 +985,9 @@ a { color: inherit; }
 }
 
 .status-building,
-.status-deploying {
+.status-deploying,
+.status-pending,
+.status-validating {
   border-color: var(--rh-gold-border);
   background: var(--rh-gold-light);
   color: var(--rh-gold-dark);

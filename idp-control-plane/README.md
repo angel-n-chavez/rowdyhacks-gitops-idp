@@ -18,6 +18,10 @@ uvicorn app.main:create_app --factory --port 8000 --workers 1
 `--workers 1` is required: the store and job queue live inside the process.
 Interactive docs: http://localhost:8000/docs
 
+For local portal development, the API allows browser requests from
+`http://localhost:5173` and `http://127.0.0.1:5173`. Start the portal using
+the instructions in `../portal/README.md`.
+
 ## Endpoints (Phase 1)
 
 | Method | Path | Notes |

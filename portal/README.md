@@ -27,14 +27,28 @@ The experience should feel like a simplified internal Heroku or Render dashboard
 
 ## Run locally
 
-Open `index.html` in a browser. The portal is static and does not need the FastAPI service or a local build step.
+Serve the portal from the repository root (the control plane only allows these local origins):
+
+```bash
+cd portal
+python3 -m http.server 5173
+```
+
+Open http://localhost:5173/ for the mock demo. To use the local control plane, open
+http://localhost:5173/?api after starting it using the steps in
+[`idp-control-plane/README.md`](../idp-control-plane/README.md). The API mode
+loads real applications and supports deploy, redeploy, and status polling.
+If the control plane uses a different origin, pass it as the `api` value, for
+example `http://localhost:5173/?api=http%3A%2F%2Flocalhost%3A8001`.
+Logs and delete remain available only in mock mode until the control plane
+implements those endpoints. Use `http://localhost:5173/` to return to mock mode.
 
 ## Mock service
 
 `mock-service.js` provides `getApps()`, `getApp(name)`, `deployApp(payload)`, `getLogs(name)`, and `deleteApp(name)`. Its in-memory demo data covers BUILDING, DEPLOYING, RUNNING, CRASHING, and FAILED. New mock deployments advance through BUILDING, DEPLOYING, and RUNNING, then receive a demo live URL. Reloading the page resets the demo data.
 
-The UI depends only on this small service boundary; it does not contain deployment or infrastructure logic, and it assumes no real endpoint or response format.
+The UI depends on a small service boundary; it does not contain deployment or infrastructure logic. `api-service.js` adapts the control-plane API contract for the existing UI.
 
 ## Useful platform fields
 
-The portal currently displays the application name, Golden Path, repository, status, deployment reference, last-updated label, live URL, a short failure explanation, and recent logs. A future API contract should provide user-facing status and failure details plus a URL when one is available. The portal can continue to own the presentation and navigation around those values.
+The portal currently displays the application name, Golden Path, repository, status, deployment reference, last-updated label, live URL, a short failure explanation, and recent logs. The control-plane API currently provides these fields, including deployment status and failure details. The portal displays live URLs only for running or crashing apps.

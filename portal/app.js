@@ -1,9 +1,14 @@
 (() => {
   const appRoot = document.querySelector("#app");
   const dialog = document.querySelector("#logs-dialog");
-  const state = { apps: [], page: "apps", activeName: null, filter: "ALL", loading: true };
-  const statusLabels = { BUILDING: "Building", DEPLOYING: "Deploying", RUNNING: "Running", CRASHING: "Crashing", FAILED: "Failed" };
+  const service = new URLSearchParams(window.location.search).has("api")
+    ? window.ControlPlaneService
+    : window.MockService;
+  const state = { apps: [], page: "apps", activeName: null, filter: "ALL", loading: true, pollError: null, watchingName: null };
+  const statusLabels = { PENDING: "Queued", VALIDATING: "Validating", BUILDING: "Building", DEPLOYING: "Deploying", RUNNING: "Running", CRASHING: "Crashing", FAILED: "Failed" };
   const statusDescriptions = {
+    PENDING: "Waiting for a deployment worker",
+    VALIDATING: "Checking your repository",
     BUILDING: "Preparing your application",
     DEPLOYING: "Your application is being made available",
     RUNNING: "Your application is live",
@@ -22,6 +27,10 @@
     state.activeName = name;
     render();
     document.querySelector("#app").focus({ preventScroll: true });
+    if (page === "detail" && name) {
+      loadAppDetails(name);
+      watchDeployment(name);
+    }
   }
 
   function renderStatus(status) {
@@ -56,10 +65,10 @@
       </div>
       <section class="app-section" aria-labelledby="app-list-title">
         <div class="section-heading"><div><h2 id="app-list-title">Current operations <span class="count">${state.apps.length}</span></h2><p>Monitor status and jump straight to a live app.</p></div><button class="button button-secondary compact-button" type="button" data-action="refresh"><span aria-hidden="true">↻</span> Refresh</button></div>
-        <div class="filter-bar" role="group" aria-label="Filter applications by status">${["ALL", "RUNNING", "BUILDING", "DEPLOYING", "CRASHING", "FAILED"].map((filter) => `<button type="button" class="filter-chip ${state.filter === filter ? "is-selected" : ""}" data-action="filter" data-filter="${filter}" aria-pressed="${state.filter === filter}">${filter === "ALL" ? "All apps" : statusLabels[filter]}</button>`).join("")}</div>
+        <div class="filter-bar" role="group" aria-label="Filter applications by status">${["ALL", "PENDING", "VALIDATING", "RUNNING", "BUILDING", "DEPLOYING", "CRASHING", "FAILED"].map((filter) => `<button type="button" class="filter-chip ${state.filter === filter ? "is-selected" : ""}" data-action="filter" data-filter="${filter}" aria-pressed="${state.filter === filter}">${filter === "ALL" ? "All apps" : statusLabels[filter]}</button>`).join("")}</div>
         ${visibleApps.length ? `<div class="table-wrap"><table class="app-table"><thead><tr><th scope="col">APPLICATION</th><th scope="col">GOLDEN PATH</th><th scope="col">STATUS</th><th scope="col">LIVE URL</th><th scope="col">UPDATED</th><th scope="col"><span class="visually-hidden">Actions</span></th></tr></thead><tbody>${visibleApps.map(renderAppRow).join("")}</tbody></table></div>` : `<div class="empty-state"><span class="empty-mark" aria-hidden="true">◫</span><h3>${state.apps.length ? "No applications in this view" : "A good place to start"}</h3><p>${state.apps.length ? "Try another status filter." : "Connect a public repository and choose a Golden Path to make your first application."}</p>${state.apps.length ? "" : `<button class="button button-primary" type="button" data-action="new-app">＋ Deploy your first application</button>`}</div>`}
       </section>
-      <footer class="page-footer"><span><i class="footer-dot"></i> Platform status: operational</span><span>Updated just now <span aria-hidden="true">·</span> Demo workspace</span></footer>
+      <footer class="page-footer"><span><i class="footer-dot"></i> Platform status: operational</span><span>Updated just now <span aria-hidden="true">·</span> ${new URLSearchParams(window.location.search).has("api") ? "Local control plane" : "Demo workspace"}</span></footer>
     </section>`;
   }
 
@@ -73,8 +82,8 @@
             <div class="input-wrap"><span class="input-prefix" aria-hidden="true">⌘</span><input id="repository" name="repository" type="url" placeholder="https://github.com/you/your-project" autocomplete="url" required><span class="input-suffix">PUBLIC</span></div>
             <p class="field-hint">The repository should contain the source for the application you want to deploy.</p>
             <label class="field-label name-label" for="app-name">Application name</label>
-            <input class="text-input" id="app-name" name="name" type="text" placeholder="my-awesome-app" minlength="2" maxlength="40" required>
-            <p class="field-hint">Use lowercase letters, numbers, and hyphens.</p>
+            <input class="text-input" id="app-name" name="name" type="text" placeholder="my-awesome-app" minlength="3" maxlength="30" required>
+            <p class="field-hint">Use 3–30 lowercase letters, numbers, and hyphens.</p>
             <p class="form-error" id="form-error" role="alert" hidden></p>
           </section>
           <section class="form-section path-section"><div class="form-step"><span>02</span><div><h2>Choose a Golden Path</h2><p>A supported starting point, tailored to your app.</p></div></div>
@@ -91,18 +100,24 @@
   }
 
   function renderProgress(app) {
-    const stages = ["BUILDING", "DEPLOYING", "RUNNING"];
-    const activeIndex = stages.indexOf(app.status);
+    const stages = [
+      { status: "PENDING", label: "Queued", note: "Waiting for a worker" },
+      { status: "VALIDATING", label: "Validating", note: "Checking your repository" },
+      ...(app.type === "FastAPI" ? [{ status: "BUILDING", label: "Building", note: "Preparing your app" }] : []),
+      { status: "DEPLOYING", label: "Deploying", note: "Making it available" },
+      { status: "RUNNING", label: "Running", note: "Ready for traffic" },
+    ];
+    const activeIndex = stages.findIndex((stage) => stage.status === app.status);
     const done = app.status === "RUNNING";
     const failed = ["CRASHING", "FAILED"].includes(app.status);
-    const errorStep = app.status === "CRASHING" ? 2 : 1;
+    const errorStep = app.status === "CRASHING"
+      ? stages.length - 2
+      : Math.max(0, stages.findIndex((stage) => stage.status === (app.type === "FastAPI" ? "BUILDING" : "DEPLOYING")));
     return `<div class="deployment-progress ${failed ? "has-failed" : ""}"><div class="progress-heading"><span class="progress-symbol" aria-hidden="true">${done ? "✓" : failed ? "!" : "◷"}</span><span><strong>${failed ? "Deployment needs attention" : done ? "Deployment complete" : "Deployment in progress"}</strong><small>${statusDescriptions[app.status]}</small></span>${renderStatus(app.status)}</div><ol class="progress-steps">${stages.map((stage, index) => {
       const completed = done || (failed && index < errorStep) || (!failed && activeIndex > index);
       const current = !failed && activeIndex === index;
       const stepClass = completed ? "is-done" : current ? "is-current" : failed && index === errorStep ? "is-error" : "";
-      const labels = { BUILDING: "Building", DEPLOYING: "Deploying", RUNNING: "Running" };
-      const notes = { BUILDING: "Preparing your app", DEPLOYING: "Making it available", RUNNING: "Ready for traffic" };
-      return `<li class="${stepClass}"><span class="step-marker">${completed ? "✓" : index + 1}</span><span><strong>${labels[stage]}</strong><small>${notes[stage]}</small></span></li>`;
+      return `<li class="${stepClass}"><span class="step-marker">${completed ? "✓" : index + 1}</span><span><strong>${stage.label}</strong><small>${stage.note}</small></span></li>`;
     }).join("")}</ol></div>`;
   }
 
@@ -113,11 +128,12 @@
       : `<div class="live-panel live-pending"><span class="live-panel-icon" aria-hidden="true">◷</span><span class="live-panel-copy"><small>YOUR LIVE URL</small><strong>${app.status === "FAILED" ? "Available after a successful deployment" : "Available when deployment is complete"}</strong></span></div>`;
     return `<section class="page-content detail-page">
       <div class="detail-back-row"><button class="text-back" type="button" data-action="back">← Applications</button><span class="detail-deployment-id"><span class="case-label">CASE</span>${escapeHtml(app.deployment)}</span></div>
-      <div class="detail-heading"><div class="detail-title-wrap"><span class="detail-app-glyph ${app.type === "FastAPI" ? "api-glyph" : "site-glyph"}" aria-hidden="true">${app.type === "FastAPI" ? "ƒ" : "◫"}</span><div><p class="eyebrow">OPERATION DOSSIER</p><h1>${escapeHtml(app.name)}</h1><p class="detail-subtitle">${escapeHtml(app.type)} <span>·</span> Created from a repository</p></div></div><div class="detail-actions"><button class="button button-secondary" type="button" data-action="logs" data-name="${escapeHtml(app.name)}">↗ <span>View logs</span></button><button class="button button-primary" type="button" data-action="redeploy" data-name="${escapeHtml(app.name)}">↻ <span>Redeploy</span></button><button class="icon-button delete-button" type="button" data-action="delete" data-name="${escapeHtml(app.name)}" aria-label="Delete application">⌫</button></div></div>
-      ${isError ? `<div class="error-banner"><span class="error-icon" aria-hidden="true">!</span><span><strong>${app.status === "CRASHING" ? "Your application is not responding" : "This deployment failed"}</strong><small>${escapeHtml(app.issue || statusDescriptions[app.status])}</small></span><button class="button button-secondary error-log-button" type="button" data-action="logs" data-name="${escapeHtml(app.name)}">View logs</button></div>` : ""}
+      <div class="detail-heading"><div class="detail-title-wrap"><span class="detail-app-glyph ${app.type === "FastAPI" ? "api-glyph" : "site-glyph"}" aria-hidden="true">${app.type === "FastAPI" ? "ƒ" : "◫"}</span><div><p class="eyebrow">OPERATION DOSSIER</p><h1>${escapeHtml(app.name)}</h1><p class="detail-subtitle">${escapeHtml(app.type)} <span>·</span> Created from a repository</p></div></div><div class="detail-actions">${service.supportsLogs === false ? "" : `<button class="button button-secondary" type="button" data-action="logs" data-name="${escapeHtml(app.name)}">↗ <span>View logs</span></button>`}<button class="button button-primary" type="button" data-action="redeploy" data-name="${escapeHtml(app.name)}">↻ <span>Redeploy</span></button>${service.supportsDelete === false ? "" : `<button class="icon-button delete-button" type="button" data-action="delete" data-name="${escapeHtml(app.name)}" aria-label="Delete application">⌫</button>`}</div></div>
+      ${state.pollError ? `<div class="error-banner"><span class="error-icon" aria-hidden="true">!</span><span><strong>Could not refresh application status</strong><small>${escapeHtml(state.pollError)}</small></span></div>` : ""}
+      ${isError ? `<div class="error-banner"><span class="error-icon" aria-hidden="true">!</span><span><strong>${app.status === "CRASHING" ? "Your application is not responding" : "This deployment failed"}</strong><small>${escapeHtml(app.issue || statusDescriptions[app.status])}</small></span>${service.supportsLogs === false ? "" : `<button class="button button-secondary error-log-button" type="button" data-action="logs" data-name="${escapeHtml(app.name)}">View logs</button>`}</div>` : ""}
       ${renderProgress(app)}
       <div class="detail-grid"><section class="detail-section"><div class="section-heading detail-section-heading"><div><h2>Application details</h2><p>Source and Golden Path for this application.</p></div></div><dl class="details-list"><div><dt>Repository</dt><dd><a href="${escapeHtml(app.repository)}" target="_blank" rel="noreferrer">${escapeHtml(app.repository.replace("https://github.com/", ""))}<span aria-hidden="true">↗</span></a></dd></div><div><dt>Golden Path</dt><dd><span class="type-dot ${app.type === "FastAPI" ? "dot-api" : "dot-site"}"></span>${escapeHtml(app.type)}</dd></div><div><dt>Deployment</dt><dd class="mono-value">${escapeHtml(app.deployment)}</dd></div><div><dt>Last updated</dt><dd>${escapeHtml(app.updated)}</dd></div></dl></section><section class="detail-section url-section"><div class="section-heading detail-section-heading"><div><h2>Live application</h2><p>Your app’s address and availability.</p></div></div>${livePanel}</section></div>
-      <footer class="page-footer"><span><i class="footer-dot"></i> Platform status: operational</span><span>Application details <span aria-hidden="true">·</span> Demo workspace</span></footer>
+      <footer class="page-footer"><span><i class="footer-dot"></i> Platform status: operational</span><span>Application details <span aria-hidden="true">·</span> ${new URLSearchParams(window.location.search).has("api") ? "Local control plane" : "Demo workspace"}</span></footer>
     </section>`;
   }
 
@@ -138,30 +154,54 @@
 
   async function refreshApps() {
     state.loading = true;
+    state.pollError = null;
     render();
     try {
-      state.apps = await window.MockService.getApps();
+      state.apps = await service.getApps();
     } catch (error) {
       state.apps = [];
-      appRoot.innerHTML = `<section class="load-error"><strong>Workspace unavailable</strong><p>We couldn't load your applications. Try refreshing.</p><button class="button button-secondary" type="button" data-action="refresh">Try again</button></section>`;
+      state.loading = false;
+      appRoot.innerHTML = `<section class="load-error"><strong>Workspace unavailable</strong><p>${escapeHtml(error.message || "We couldn't load your applications.")}</p><button class="button button-secondary" type="button" data-action="refresh">Try again</button></section>`;
       return;
     }
     state.loading = false;
     render();
   }
 
-  function watchDeployment(name) {
-    let attempts = 0;
-    const check = async () => {
-      if (state.page !== "detail" || state.activeName !== name || attempts++ >= 12) return;
-      const current = await window.MockService.getApp(name);
-      if (!current) return;
+  async function loadAppDetails(name) {
+    try {
+      const current = await service.getApp(name);
+      if (!current || state.page !== "detail" || state.activeName !== name) return;
       const index = state.apps.findIndex((app) => app.name === name);
       if (index >= 0) state.apps[index] = current;
+      else state.apps.push(current);
+      state.pollError = null;
       render();
-      if (["BUILDING", "DEPLOYING"].includes(current.status)) setTimeout(check, 900);
+    } catch (error) {
+      if (state.page !== "detail" || state.activeName !== name) return;
+      state.pollError = error.message || "The application details could not be loaded.";
+      render();
+    }
+  }
+
+  function watchDeployment(name) {
+    if (state.watchingName === name) return;
+    state.watchingName = name;
+    const check = async () => {
+      if (state.page !== "detail" || state.activeName !== name) {
+        if (state.watchingName === name) state.watchingName = null;
+        return;
+      }
+      await loadAppDetails(name);
+      if (state.watchingName !== name) return;
+      const current = appByName(name);
+      if (current && ["PENDING", "VALIDATING", "BUILDING", "DEPLOYING"].includes(current.status)) {
+        setTimeout(check, 1500);
+      } else {
+        state.watchingName = null;
+      }
     };
-    setTimeout(check, 850);
+    setTimeout(check, 900);
   }
 
   async function openLogs(name) {
@@ -171,7 +211,7 @@
     document.querySelector("#logs-app-name").textContent = app.deployment;
     document.querySelector("#log-output").textContent = "Loading recent output…";
     dialog.showModal();
-    const lines = await window.MockService.getLogs(name);
+    const lines = await service.getLogs(name);
     document.querySelector("#log-output").textContent = lines.join("\n");
   }
 
@@ -191,15 +231,19 @@
     if (action === "redeploy") {
       const app = appByName(name);
       if (!app) return;
-      const updated = await window.MockService.deployApp({ name: app.name, repository: app.repository, goldenPath: app.type });
-      const index = state.apps.findIndex((item) => item.name === name);
-      if (index >= 0) state.apps[index] = updated;
-      setPage("detail", name);
-      watchDeployment(name);
+      try {
+        const updated = await service.deployApp({ name: app.name, repository: app.repository, goldenPath: app.type });
+        const index = state.apps.findIndex((item) => item.name === name);
+        if (index >= 0) state.apps[index] = updated;
+        setPage("detail", name);
+      } catch (error) {
+        state.pollError = error.message || "We couldn't start this deployment.";
+        render();
+      }
     }
     if (action === "delete") {
       if (!window.confirm(`Delete ${name} from this workspace?`)) return;
-      await window.MockService.deleteApp(name);
+      await service.deleteApp(name);
       state.apps = state.apps.filter((app) => app.name !== name);
       setPage("apps");
     }
@@ -224,12 +268,12 @@
     const repository = String(values.get("repository") || "").trim();
     const goldenPath = String(values.get("goldenPath") || "Static Website");
     const error = document.querySelector("#form-error");
-    const nameValid = /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(name) && name.length <= 40;
+    const nameValid = /^[a-z0-9](?:[-a-z0-9]{1,28}[a-z0-9])?$/.test(name) && name.length >= 3 && name.length <= 30;
     let repositoryUrl;
     try { repositoryUrl = new URL(repository); } catch { repositoryUrl = null; }
     if (!nameValid || !repositoryUrl || repositoryUrl.hostname !== "github.com" || repositoryUrl.pathname.split("/").filter(Boolean).length < 2) {
       error.hidden = false;
-      error.textContent = !nameValid ? "Choose a name using lowercase letters, numbers, and hyphens (up to 40 characters)." : "Enter a valid public GitHub repository URL, such as https://github.com/you/project.";
+      error.textContent = !nameValid ? "Choose a name using 3–30 lowercase letters, numbers, and hyphens; it must start and end with a letter or number." : "Enter a valid public GitHub repository URL, such as https://github.com/you/project.";
       return;
     }
     if (state.apps.some((app) => app.name === name)) {
@@ -241,14 +285,13 @@
     submit.disabled = true;
     submit.innerHTML = `<span class="loading-spinner small-spinner" aria-hidden="true"></span><span>Starting deployment…</span>`;
     try {
-      const created = await window.MockService.deployApp({ name, repository, goldenPath });
+      const created = await service.deployApp({ name, repository, goldenPath });
       state.apps.push(created);
       setPage("detail", name);
-      watchDeployment(name);
-    } catch {
+    } catch (requestError) {
       submit.disabled = false;
       error.hidden = false;
-      error.textContent = "We couldn't start this deployment. Please try again.";
+      error.textContent = requestError.message || "We couldn't start this deployment. Please try again.";
     }
   });
 
